@@ -120,16 +120,16 @@ Usage: java -jar xxx.jar [options]
    * @param ctx The build context.
    * @return
    */
-  def buildMain(ctx: Context): (parallel.ParSeq[ProcResponse], Boolean) = {
+  def buildMain(ctx: Context): (List[ProcResponse], Boolean) = {
 
     // build js files.
     val results = buildByGroup(ctx)
 
     if (ctx.isStrict) {
+      val fnmap = convertFileNameMap(results.flatMap(r => parsePlovrMessages(r.err)))
+
       val warnings =
         for {
-          res <- results
-          fnmap = convertFileNameMap(parsePlovrMessages(res.err))
           entry <- fnmap
           path = entry._1
           if ctx.isStrictPath(path)
@@ -332,12 +332,12 @@ Usage: java -jar xxx.jar [options]
    *
    * @param ctx The context.
    */
-  def buildByGroup(ctx: Context): parallel.ParSeq[ProcResponse] = {
+  def buildByGroup(ctx: Context): List[ProcResponse] = {
     if (ctx.groupSize == 0)
-      parallel.ParSeq()
+      List()
     else {
       ctx.settings.grouped(ctx.groupSize).filter(!_.isEmpty).
-        toSeq.par.map(build(ctx, _))
+        toSeq.par.map(build(ctx, _)).toList
     }
   }
 
