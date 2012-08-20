@@ -137,7 +137,7 @@ Usage: java -jar xxx.jar [options]
 
       val noWarnings = warnings.isEmpty
       if (!noWarnings) {
-        printWarnings(warnings)
+        printWarnings(warnings.toList)
       }
 
       (results, noWarnings)
@@ -149,7 +149,7 @@ Usage: java -jar xxx.jar [options]
    * Print out aggregated warnings.
    * @param
    */
-  def printWarnings(warnings: parallel.ParSeq[(String, mutable.LinkedHashSet[PlovrMessage])]) {
+  def printWarnings(warnings: List[(String, mutable.LinkedHashSet[PlovrMessage])]) {
       println()
       println(Console.RED + "*" * 80 + Console.RESET)
       println(Console.RED + "  ERROR: Warnings detected" + Console.RESET)
