@@ -11,9 +11,10 @@ object PlovrBuild {
   def usage = """
 Usage: java -jar xxx.jar [options]
 
-  -c JS dir. ex) etc/plovr
-     The directory must have plovr/release directory in it.
-     uses src/main/webapp/static/js by default.
+  -p plovr jar path
+     It uses plovr.jar by default.
+
+  -c plovr config dir. ex) etc/plovr
 
   -j The number of processes to execute.
      Plovr may consumes 0.5 to 2GB memory so take care with the option.
@@ -21,6 +22,9 @@ Usage: java -jar xxx.jar [options]
 
   -s The column separated pathes to enable strict mode.
      If the warning occurs, it returns 1.
+
+  -m The maximum memory in MB that each plovr can use.
+     It uses 1024 by default
 """
 
   val BUILD_FAILED = 1
@@ -47,6 +51,8 @@ Usage: java -jar xxx.jar [options]
           nextOption(map ++ Map('configdir -> value), tail)
         case "-s" :: value :: tail =>
           nextOption(map ++ Map('strict -> value.split(",").toList), tail)
+        case "-x" :: value :: tail =>
+          nextOption(map ++ Map('xmx -> value.toInt), tail)
         case string :: Nil =>
           nextOption(map ++ Map('infile -> string), list.tail)
         case option :: tail =>
@@ -67,7 +73,8 @@ Usage: java -jar xxx.jar [options]
       options.getOrElse('plovr, "plovr.jar").asInstanceOf[String],
       options.getOrElse('configdir, ".").asInstanceOf[String],
       options.getOrElse('jobs, defaultParallelism).asInstanceOf[Int],
-      options.getOrElse('strict, List()).asInstanceOf[List[String]])
+      options.getOrElse('strict, List()).asInstanceOf[List[String]],
+      options.getOrElse('xmx, 1024).asInstanceOf[Int])
   }
 
   /**
@@ -82,6 +89,12 @@ Usage: java -jar xxx.jar [options]
     }
 
     val ctx = makeContext(args.toList)
+    if (! new File(ctx.plovr).exists()) {
+      println("plovr.jar does not found: " + ctx.plovr)
+      System.exit(1)
+    }
+
+    println(ctx);
     scala.collection.parallel.ForkJoinTasks.defaultForkJoinPool.setParallelism(ctx.parallelism)
 
     val started = new java.util.Date().getTime
@@ -93,7 +106,7 @@ Usage: java -jar xxx.jar [options]
     if (results.isEmpty) {
       println("Nothing to build")
       System.exit(NOTHING_TO_BUILD)
-    } else if (noWarnings && !results.forall(_.code == 0))
+    } else if (noWarnings && results.forall(_.code == 0))
       println(Console.GREEN + "[Success] JS compile" + Console.RESET)
     else {
       println(Console.RED + "[Fail] JS compile" + Console.RESET)
@@ -156,7 +169,7 @@ Usage: java -jar xxx.jar [options]
    * @param configDir The directory where config files exists.
    * @param The list of pathes in which js fiels warnings treated as error.
    */
-  case class Context(plovr: String, configDir: String, parallelism: Int, strict: List[String]) {
+  case class Context(plovr: String, configDir: String, parallelism: Int, strict: List[String], xmx: Int) {
     private var settingsCache: Option[Seq[File]] = None
 
     /**
@@ -207,7 +220,7 @@ Usage: java -jar xxx.jar [options]
      * @return The strict pthes.
      */
     def isStrictPath(path: String) =
-      strict.contains((s:String) => s.contains(path))
+      strict.exists((s:String) => path.contains(s))
 
   }
 
@@ -310,7 +323,7 @@ Usage: java -jar xxx.jar [options]
    */
   def buildProcess(ctx: Context, files: Seq[File]): ProcessBuilder =
     Process("java",
-            Seq("-jar", ctx.plovr, "build") ++
+            Seq("-Xmx" + ctx.xmx + "m", "-jar", ctx.plovr, "build") ++
             files.map(_.getAbsolutePath))
 
 
@@ -322,9 +335,10 @@ Usage: java -jar xxx.jar [options]
   def buildByGroup(ctx: Context): parallel.ParSeq[ProcResponse] = {
     if (ctx.groupSize == 0)
       parallel.ParSeq()
-    else
+    else {
       ctx.settings.grouped(ctx.groupSize).filter(!_.isEmpty).
         toSeq.par.map(build(ctx, _))
+    }
   }
 
   /**
@@ -354,6 +368,7 @@ Usage: java -jar xxx.jar [options]
           readLine(i + 1)
         }
         case line => {
+          println(line)
           obuffer += line
           readLine(i)
         }
@@ -366,7 +381,6 @@ Usage: java -jar xxx.jar [options]
     try {
       // wait process exit here.
       val exitValue = proc.exitValue
-
       ProcResponse(xs, exitValue, stdouts.toList, stderrs.toList)
     } finally {
       // make sure to destoroy child processes.

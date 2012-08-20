@@ -13,7 +13,6 @@ class PlovrBuildTestSuite extends FunSuite {
   test("commandline parameters -j <The number of jobs>") {
     val ctx = PlovrBuild.makeContext(
       List("-j", "8", "-p"))
-    println(ctx.parallelism)
     assert(8 == ctx.parallelism)
   }
 
@@ -32,8 +31,21 @@ class PlovrBuildTestSuite extends FunSuite {
   test("commandline parameters -s <strict path>") { 
     val ctx = PlovrBuild.makeContext(
       List("-j", "8", "-s", "/strict/,/strict2/"))
-    assert(List("/strict/", "/strict2/") == ctx.strict) 
+    assert(List("/strict/", "/strict2/") == ctx.strict)
   }
 
+  test("commandline parameters -x <memory size>") {
+    val ctx = PlovrBuild.makeContext(
+      List("-j", "8", "-x", "2048"))
+    assert(2048 == ctx.xmx)
+  }
+
+  test("strict path handling") {
+    val ctx = PlovrBuild.Context("plovr.jar", "src/config", 4, List("/strict/", "/strict2/"), 1024)
+    assert(ctx.isStrict)
+    assert(ctx.isStrictPath("foo/strict/bar"))
+    assert(ctx.isStrictPath("foo/strict2/bar"))
+    assert(!ctx.isStrictPath("foo/strict3/bar"))
+  }
 
 }
